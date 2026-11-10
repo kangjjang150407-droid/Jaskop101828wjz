@@ -136,7 +136,7 @@ const UNITS = [
 
 // 적 잔향체 (왼쪽에서 오른쪽으로)
 const ENEMIES = {
-  rat:    { name:"그림자 쥐",    hp:60,    atk:6,   range:20,  rate:0.9, speed:60, kb:1, area:false, reward:12,  color:"#5d5470", shape:"rat",    size:0.8 },
+  rat:    { name:"뒷골목 쥐",    hp:60,    atk:6,   range:24,  rate:0.9, speed:60, kb:1, area:false, reward:12,  color:"#6b2a26", shape:"rat",    size:1.0, sprite:"rat", barY:78 },
   hound:  { name:"썩은 들개",    hp:180,   atk:16,  range:22,  rate:0.8, speed:85, kb:2, area:false, reward:30,  color:"#7a5a48", shape:"hound",  size:1.0 },
   knight: { name:"녹슨 기사",    hp:900,   atk:40,  range:28,  rate:1.6, speed:28, kb:2, area:false, reward:90,  color:"#8a7a5c", shape:"knight", size:1.25 },
   wailer: { name:"울부짖는 자",  hp:300,   atk:30,  range:150, rate:2.0, speed:35, kb:2, area:true,  reward:70,  color:"#a05a8a", shape:"wailer", size:1.05 },
@@ -186,6 +186,79 @@ const lvMul = lv => 1 + (lv - 1) * 0.2;
 const unitUpCost = (u, lv) => Math.round((40 + u.cost * 0.35) * Math.pow(1.45, lv - 1));
 const unitUnlockCost = u => Math.round(u.cost * 0.6);
 const officeCost = (o, lv) => Math.round(o.base * Math.pow(1.6, lv));
+
+/* =========================================================
+   스프라이트 (assets/ 폴더의 PNG)
+   w,h = 이미지 크기, ax = 발 위치(가로 기준점)
+   원본 그림은 대부분 왼쪽을 바라봄 → 오른쪽으로 걷는 적은 좌우 반전
+   ========================================================= */
+const SPRITES = {
+  rat: {
+    path: "assets/rat/", baseH: 235,
+    meta: {
+      knock:  { w:146, h:218, ax:86 },
+      run:    { w:160, h:220, ax:93 },
+      idle:   { w:145, h:235, ax:73 },
+      crouch: { w:168, h:208, ax:120 },
+      raise:  { w:160, h:207, ax:102 },
+      swing:  { w:272, h:250, ax:85 },
+      slash:  { w:346, h:169, ax:207 },
+    },
+    img: {},
+  },
+};
+const spriteReady = [];
+for (const sp of Object.values(SPRITES)) {
+  for (const k in sp.meta) {
+    const im = new Image();
+    spriteReady.push(new Promise(r => { im.onload = im.onerror = r; }));
+    im.src = sp.path + k + ".png";
+    sp.img[k] = im;
+  }
+}
+Promise.all(spriteReady).then(() => { if (!B) renderMenu(); });
+
+function drawSprite(ctx, sp, frame, x, y, k, flip, rot = 0, lift = 0) {
+  const f = sp.meta[frame], im = sp.img[frame];
+  if (!im || !im.complete || !im.naturalWidth) return false;
+  ctx.save();
+  ctx.translate(x, y - lift);
+  if (flip) ctx.scale(-1, 1);
+  if (rot) { ctx.translate(0, -f.h * k / 2); ctx.rotate(rot); ctx.translate(0, f.h * k / 2); }
+  ctx.drawImage(im, -f.ax * k, -f.h * k, f.w * k, f.h * k);
+  ctx.restore();
+  return true;
+}
+
+// 적 스프라이트 그리기: 걷기 / 공격 / 대기 / 넉백·사망
+function drawEnemySprite(ctx, def, x, y, s, e) {
+  const sp = SPRITES[def.sprite];
+  const k = s * 0.24;
+  const h = sp.baseH * k;
+  ctx.fillStyle = "rgba(0,0,0,.35)";
+  ctx.beginPath(); ctx.ellipse(x, y, 16 * s / 1.25, 4, 0, 0, Math.PI * 2); ctx.fill();
+  if (!e) return drawSprite(ctx, sp, "idle", x, y, k, true);
+  if (e.dead || e.state === "knock") {
+    const p = e.dead ? Math.min(1, e.dead / 0.6) : 1 - Math.max(0, e.knockT) / 0.45;
+    return drawSprite(ctx, sp, "knock", x, y, k, false, (p - 0.5) * 0.8, Math.sin(p * Math.PI) * h * 0.35);
+  }
+  if (e.state === "attack") {
+    const sw = e.swing;
+    if (sw < 0.15) return drawSprite(ctx, sp, "crouch", x, y, k, true);
+    if (sw < 0.45) return drawSprite(ctx, sp, "raise", x, y, k, false);
+    drawSprite(ctx, sp, "swing", x, y, k, false);
+    if (sw < 0.85) {
+      ctx.save(); ctx.globalAlpha *= 1 - (sw - 0.45) / 0.4;
+      drawSprite(ctx, sp, "slash", x + h * 0.45, y - h * 0.15, k * 0.8, false);
+      ctx.restore();
+    }
+    return true;
+  }
+  if (e.state === "cool") return drawSprite(ctx, sp, "idle", x, y, k, true);
+  // 걷기: 두 프레임 교대 + 살짝 통통 튀기
+  const step = Math.floor(e.t * 6) % 2;
+  return drawSprite(ctx, sp, step ? "run" : "idle", x, y, k, true, 0, Math.abs(Math.sin(e.t * 6 * Math.PI / 2)) * 2);
+}
 
 /* =========================================================
    그리기 (캐릭터 아이콘)
@@ -243,7 +316,8 @@ function drawUnitFigure(ctx, def, x, y, s, t, attacking, flip) {
   ctx.restore();
 }
 
-function drawEnemyFigure(ctx, def, x, y, s, t, attacking) {
+function drawEnemyFigure(ctx, def, x, y, s, t, attacking, ent) {
+  if (def.sprite && drawEnemySprite(ctx, def, x, y, s, ent)) return;
   ctx.save();
   ctx.translate(x, y);
   ctx.scale(s, s);
@@ -321,7 +395,8 @@ function iconCanvas(def, isEnemy, px = 54) {
   const ctx = c.getContext("2d");
   ctx.scale(dpr, dpr);
   const sc = px / 54 * 1.15 / Math.max(1, (def.size || 1) * 0.75);
-  if (isEnemy) drawEnemyFigure(ctx, def, px / 2, px * 0.88, sc, 0, 0);
+  if (isEnemy && def.sprite) drawEnemyFigure(ctx, def, px / 2, px * 0.95, px * 0.9 / (SPRITES[def.sprite].baseH * 0.24), 0, 0);
+  else if (isEnemy) drawEnemyFigure(ctx, def, px / 2, px * 0.88, sc, 0, 0);
   else drawUnitFigure(ctx, def, px / 2, px * 0.88, sc, 0, 0, false);
   return c;
 }
@@ -714,11 +789,11 @@ function render() {
     const atk = e.state === "attack" ? e.swing : 0;
     const t = e.state === "walk" ? e.t : 0;
     if (e.team === "p") drawUnitFigure(ctx, e.def, e.x, e.y, 1.25 * e.def.size, t, atk, false);
-    else drawEnemyFigure(ctx, e.def, e.x, e.y, 1.25 * e.def.size, t, atk);
+    else drawEnemyFigure(ctx, e.def, e.x, e.y, 1.25 * e.def.size, t, atk, e);
     ctx.globalAlpha = 1;
     // 체력바 (피해 입은 경우만)
     if (!e.dead && e.hp < e.max) {
-      const w = 26 * Math.max(1, e.def.size * 0.8), hy = e.y - 52 * e.def.size - 6;
+      const w = 26 * Math.max(1, e.def.size * 0.8), hy = e.y - (e.def.barY || 52 * e.def.size) - 6;
       ctx.fillStyle = "#000"; ctx.fillRect(e.x - w / 2, hy, w, 4);
       ctx.fillStyle = e.team === "p" ? "#8fd07a" : "#e0564b"; ctx.fillRect(e.x - w / 2, hy, w * Math.max(0, e.hp / e.max), 4);
     }
