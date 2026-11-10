@@ -1,0 +1,9 @@
+{
+  "name": "잿빛 도시 방어선",
+  "short_name": "잿빛 방어선",
+  "start_url": "./index.html",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#0b0a0f",
+  "theme_color": "#0b0a0f"
+}

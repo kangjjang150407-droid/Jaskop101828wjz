@@ -4,6 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>잿빛 도시 방어선 — 등불 사무소</title>
+<link rel="manifest" href="manifest.json">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; user-select: none; }
   html, body { height: 100%; background: #0b0a0f; color: #e8e2d4; font-family: "Pretendard", "Noto Sans KR", system-ui, sans-serif; overflow: hidden; }
@@ -69,9 +73,44 @@
     .slot canvas { width: 30px; height: 30px; }
     #wallet, #cannon { width: 64px; font-size: 11px; }
   }
+
+  /* ---------- 모바일 가로 화면 (높이가 낮은 화면) ---------- */
+  @media (max-height: 500px) {
+    #menu { padding: 8px 12px; gap: 8px; }
+    .title { padding: 2px 0 0; }
+    .title h1 { font-size: 22px; }
+    .title p { display: none; }
+    .bar, .tab { padding: 6px 10px; font-size: 13px; }
+    .card { padding: 6px 10px; }
+    .card canvas { width: 42px; height: 42px; }
+    #hud { padding: 2px 8px; font-size: 12px; }
+    #money { font-size: 15px; }
+    #controls { padding: 4px; gap: 4px; }
+    #slots { grid-template-columns: repeat(7, 1fr); gap: 4px; }
+    .slot { min-height: 54px; padding: 2px 0; }
+    .slot canvas { width: 30px; height: 30px; }
+    .slot .cost { font-size: 11px; }
+    #wallet, #cannon { width: 66px; font-size: 11px; }
+  }
+  body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+
+  /* ---------- 세로 화면 차단 (터치 기기) ---------- */
+  #rotate { display: none; position: fixed; inset: 0; z-index: 100; background: #0b0a0f; flex-direction: column; align-items: center; justify-content: center; gap: 18px; text-align: center; padding: 20px; }
+  #rotate .phone { width: 46px; height: 78px; border: 3px solid #f2c36b; border-radius: 9px; animation: turn 1.8s ease-in-out infinite; }
+  #rotate p { color: #e8e2d4; font-size: 17px; line-height: 1.6; }
+  #rotate small { color: #8d8676; font-size: 13px; }
+  @keyframes turn { 0%, 25% { transform: rotate(0); } 60%, 100% { transform: rotate(-90deg); } }
+  @media (orientation: portrait) and (pointer: coarse) {
+    #rotate { display: flex; }
+  }
 </style>
 </head>
 <body>
+<div id="rotate">
+  <div class="phone"></div>
+  <p>화면을 <b style="color:#f2c36b">가로</b>로 돌려주세요</p>
+  <small>잿빛 도시 방어선은 가로 화면 전용입니다</small>
+</div>
 <div id="app">
   <!-- ===== 메뉴 ===== -->
   <div id="menu" class="screen active">
@@ -870,10 +909,24 @@ window.addEventListener("keydown", ev => {
   else if (ev.key === "Escape") $("#pauseBtn").click();
 });
 
+// 모바일 가로 고정: 첫 터치 때 전체화면 + 가로 잠금 시도 (안드로이드 크롬 등에서 동작, 미지원 기기는 안내 화면으로 대체)
+const portraitMQ = matchMedia("(orientation: portrait) and (pointer: coarse)");
+function lockLandscape() {
+  if (!matchMedia("(pointer: coarse)").matches) return;
+  const el = document.documentElement;
+  const req = el.requestFullscreen || el.webkitRequestFullscreen;
+  const lock = () => screen.orientation && screen.orientation.lock && screen.orientation.lock("landscape").catch(() => {});
+  if (req && !document.fullscreenElement && !document.webkitFullscreenElement) {
+    try { const r = req.call(el); r && r.then ? r.then(lock, () => {}) : lock(); } catch { lock(); }
+  } else lock();
+}
+window.addEventListener("pointerdown", lockLandscape, { once: true });
+portraitMQ.addEventListener("change", () => { if (B) { lastT = performance.now(); resize(); } });
+
 function loop(now) {
   const dt = Math.min(0.05, (now - lastT) / 1000);
   lastT = now;
-  if (B && !B.paused && !B.over) update(dt);
+  if (B && !B.paused && !B.over && !portraitMQ.matches) update(dt); // 세로 화면이면 전투 일시 정지
   if (B) { render(); updateHud(); }
   if (B) rafId = requestAnimationFrame(loop);
 }
