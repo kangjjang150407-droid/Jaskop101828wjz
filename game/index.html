@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>잿빛 도시 방어선 — 등불 사무소</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; user-select: none; }
+  html, body { height: 100%; background: #0b0a0f; color: #e8e2d4; font-family: "Pretendard", "Noto Sans KR", system-ui, sans-serif; overflow: hidden; }
+  #app { display: flex; flex-direction: column; height: 100%; max-width: 1200px; margin: 0 auto; }
+  .screen { display: none; flex: 1; flex-direction: column; min-height: 0; }
+  .screen.active { display: flex; }
+
+  /* ---------- 메뉴 ---------- */
+  #menu { overflow-y: auto; padding: 16px; gap: 14px; }
+  .title { text-align: center; padding: 10px 0 4px; }
+  .title h1 { font-size: clamp(24px, 5vw, 40px); letter-spacing: 4px; color: #f2c36b; text-shadow: 0 0 18px rgba(242,195,107,.35); }
+  .title p { color: #8d8676; font-size: 13px; margin-top: 4px; }
+  .bar { display: flex; justify-content: space-between; align-items: center; background: #17141d; border: 1px solid #2c2633; border-radius: 10px; padding: 10px 14px; }
+  .bar b { color: #9fe0ff; }
+  .tabs { display: flex; gap: 6px; }
+  .tab { flex: 1; padding: 10px; background: #17141d; border: 1px solid #2c2633; border-radius: 8px; color: #b8b0a0; cursor: pointer; font-size: 15px; }
+  .tab.on { background: #3a2a14; border-color: #f2c36b; color: #f2c36b; }
+  .panel { display: none; flex-direction: column; gap: 8px; }
+  .panel.on { display: flex; }
+  .card { display: flex; align-items: center; gap: 12px; background: #17141d; border: 1px solid #2c2633; border-radius: 10px; padding: 10px 12px; }
+  .card.locked { opacity: .45; }
+  .card .info { flex: 1; min-width: 0; }
+  .card .name { font-weight: 700; font-size: 15px; }
+  .card .desc { color: #8d8676; font-size: 12px; margin-top: 2px; }
+  .card .stat { color: #c9c1b0; font-size: 12px; margin-top: 3px; }
+  .card canvas { width: 54px; height: 54px; background: #0f0d13; border-radius: 8px; flex-shrink: 0; }
+  .btn { padding: 9px 14px; border-radius: 8px; border: 1px solid #f2c36b; background: #3a2a14; color: #f2c36b; font-weight: 700; cursor: pointer; font-size: 14px; white-space: nowrap; }
+  .btn:disabled { border-color: #444; background: #222; color: #666; cursor: default; }
+  .btn.red { border-color: #e0564b; background: #3a1614; color: #ff8a7d; }
+  .star { color: #f2c36b; }
+
+  /* ---------- 전투 ---------- */
+  #battle { background: #0b0a0f; }
+  #hud { display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; gap: 8px; font-size: 14px; }
+  #money { font-size: 18px; font-weight: 800; color: #f2c36b; }
+  #stageName { color: #b8b0a0; font-size: 13px; text-align: center; flex: 1; }
+  #cv { width: 100%; flex: 1; min-height: 0; display: block; }
+  #controls { display: flex; gap: 6px; padding: 6px; align-items: stretch; }
+  #wallet, #cannon { width: 82px; flex-shrink: 0; border-radius: 10px; border: 2px solid #5a4a2a; background: #1d1810; color: #f2c36b; font-weight: 800; font-size: 12px; cursor: pointer; position: relative; overflow: hidden; padding: 4px; }
+  #cannon { border-color: #2a4a5a; background: #10181d; color: #9fe0ff; }
+  #cannon .fill, .slot .cd { position: absolute; left: 0; bottom: 0; width: 100%; background: rgba(159,224,255,.18); pointer-events: none; }
+  #cannon.ready { box-shadow: 0 0 14px #9fe0ff; border-color: #9fe0ff; }
+  #slots { flex: 1; display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
+  .slot { position: relative; border-radius: 10px; border: 2px solid #3a3242; background: #17141d; cursor: pointer; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 3px 0; min-height: 70px; }
+  .slot canvas { width: 40px; height: 40px; }
+  .slot .cost { font-size: 12px; font-weight: 800; color: #f2c36b; }
+  .slot.poor .cost { color: #e0564b; }
+  .slot.poor, .slot.cooling { filter: grayscale(.7) brightness(.7); }
+  .slot .cd { background: rgba(0,0,0,.55); top: 0; bottom: auto; height: 0; }
+  .slot.empty { opacity: .2; cursor: default; }
+  #pauseBtn { background: none; border: 1px solid #3a3242; color: #b8b0a0; border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+
+  #overlay { position: fixed; inset: 0; background: rgba(5,4,8,.82); display: none; align-items: center; justify-content: center; z-index: 10; }
+  #overlay.show { display: flex; }
+  #overlay .box { background: #17141d; border: 1px solid #f2c36b; border-radius: 14px; padding: 26px 30px; text-align: center; min-width: 280px; max-width: 90vw; }
+  #overlay h2 { font-size: 28px; margin-bottom: 10px; }
+  #overlay p { color: #c9c1b0; margin-bottom: 18px; line-height: 1.6; }
+  #overlay .row { display: flex; gap: 10px; justify-content: center; }
+
+  @media (max-width: 640px) {
+    #slots { grid-template-columns: repeat(4, 1fr); }
+    .slot { min-height: 58px; }
+    .slot canvas { width: 30px; height: 30px; }
+    #wallet, #cannon { width: 64px; font-size: 11px; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- ===== 메뉴 ===== -->
+  <div id="menu" class="screen active">
+    <div class="title">
+      <h1>잿빛 도시 방어선</h1>
+      <p>등불 사무소의 요원들을 보내 잔향체의 둥지를 무너뜨려라</p>
+    </div>
+    <div class="bar">
+      <span>보유 파편: <b id="shards">0</b> ◆</span>
+      <span id="progressTxt"></span>
+    </div>
+    <div class="tabs">
+      <button class="tab on" data-tab="stages">작전 지역</button>
+      <button class="tab" data-tab="units">요원 관리</button>
+      <button class="tab" data-tab="office">사무소 강화</button>
+    </div>
+    <div id="p-stages" class="panel on"></div>
+    <div id="p-units" class="panel"></div>
+    <div id="p-office" class="panel"></div>
+    <div style="text-align:center;margin:10px 0 20px">
+      <button class="btn red" id="resetBtn" style="font-size:12px;padding:6px 10px">진행 초기화</button>
+    </div>
+  </div>
+
+  <!-- ===== 전투 ===== -->
+  <div id="battle" class="screen">
+    <div id="hud">
+      <span id="money">0 / 0 ₩</span>
+      <span id="stageName"></span>
+      <button id="pauseBtn">Ⅱ</button>
+    </div>
+    <canvas id="cv"></canvas>
+    <div id="controls">
+      <button id="wallet"></button>
+      <div id="slots"></div>
+      <button id="cannon"><div class="fill"></div><span>등불포</span></button>
+    </div>
+  </div>
+</div>
+
+<div id="overlay"><div class="box">
+  <h2 id="ovTitle"></h2>
+  <p id="ovText"></p>
+  <div class="row" id="ovBtns"></div>
+</div></div>
+
+<script>
+"use strict";
+/* =========================================================
+   데이터
+   ========================================================= */
+// 아군 요원 (오른쪽에서 왼쪽으로 진군)
+const UNITS = [
+  { id:"rookie",  name:"견습 요원",   desc:"싸고 빠르게 나오는 방패막이.",       cost:60,   cd:2.0,  hp:140,  atk:10,  range:22,  rate:1.0, speed:55, kb:3, area:false, unlock:0,   color:"#c9c1b0", weapon:"baton",  size:1.0 },
+  { id:"warden",  name:"철벽 수위",   desc:"높은 체력의 벽. 적의 진군을 늦춘다.",  cost:150,  cd:4.0,  hp:700,  atk:6,   range:24,  rate:1.4, speed:32, kb:2, area:false, unlock:0,   color:"#6f8fa8", weapon:"shield", size:1.15 },
+  { id:"blade",   name:"단검 해결사", desc:"빠르게 연속 공격하는 근접 딜러.",     cost:260,  cd:5.0,  hp:260,  atk:34,  range:26,  rate:0.55,speed:70, kb:3, area:false, unlock:1,   color:"#d0584b", weapon:"blade",  size:1.0 },
+  { id:"marks",   name:"잿빛 저격수", desc:"먼 거리에서 강력한 한 발.",          cost:420,  cd:8.0,  hp:170,  atk:95,  range:210, rate:2.4, speed:40, kb:2, area:false, unlock:2,   color:"#8fbf7a", weapon:"rifle",  size:1.0 },
+  { id:"pyre",    name:"재불꽃 술사", desc:"앞쪽 적 전원에게 화염 범위 피해.",    cost:620,  cd:10.0, hp:340,  atk:42,  range:110, rate:1.8, speed:38, kb:3, area:true,  unlock:3,   color:"#f08a3c", weapon:"staff",  size:1.05 },
+  { id:"exec",    name:"집행 대리인", desc:"거대한 도끼로 주변을 쓸어버린다.",    cost:1300, cd:18.0, hp:1800, atk:190, range:44,  rate:2.0, speed:34, kb:4, area:true,  unlock:5,   color:"#9a6fd0", weapon:"axe",    size:1.35 },
+  { id:"lantern", name:"등불지기",    desc:"사무소의 최종 병기. 모든 것을 태운다.", cost:2600, cd:40.0, hp:5200, atk:420, range:160, rate:2.6, speed:26, kb:5, area:true,  unlock:7,   color:"#f2c36b", weapon:"lamp",   size:1.7 },
+];
+
+// 적 잔향체 (왼쪽에서 오른쪽으로)
+const ENEMIES = {
+  rat:    { name:"그림자 쥐",    hp:60,    atk:6,   range:20,  rate:0.9, speed:60, kb:1, area:false, reward:12,  color:"#5d5470", shape:"rat",    size:0.8 },
+  hound:  { name:"썩은 들개",    hp:180,   atk:16,  range:22,  rate:0.8, speed:85, kb:2, area:false, reward:30,  color:"#7a5a48", shape:"hound",  size:1.0 },
+  knight: { name:"녹슨 기사",    hp:900,   atk:40,  range:28,  rate:1.6, speed:28, kb:2, area:false, reward:90,  color:"#8a7a5c", shape:"knight", size:1.25 },
+  wailer: { name:"울부짖는 자",  hp:300,   atk:30,  range:150, rate:2.0, speed:35, kb:2, area:true,  reward:70,  color:"#a05a8a", shape:"wailer", size:1.05 },
+  mask:   { name:"가면 무리",    hp:420,   atk:28,  range:24,  rate:0.6, speed:65, kb:3, area:false, reward:60,  color:"#d8d0c0", shape:"mask",   size:1.0 },
+  maw:    { name:"아가리 덩굴",  hp:2400,  atk:85,  range:60,  rate:1.8, speed:20, kb:3, area:true,  reward:200, color:"#4a7a4a", shape:"maw",    size:1.5 },
+  // 보스
+  lord:   { name:"잿빛 군주",    hp:9000,  atk:160, range:70,  rate:2.0, speed:18, kb:4, area:true,  reward:600, color:"#3a3a44", shape:"lord",   size:2.0, boss:true },
+  bell:   { name:"종탑의 망령",  hp:16000, atk:120, range:240, rate:2.6, speed:14, kb:5, area:true,  reward:900, color:"#6a8ab0", shape:"bell",   size:2.1, boss:true },
+  heart:  { name:"도시의 심장",  hp:32000, atk:260, range:90,  rate:2.2, speed:12, kb:6, area:true,  reward:1500,color:"#b03a3a", shape:"heart",  size:2.4, boss:true },
+};
+
+// 스테이지: spawns = [적, 첫 등장(초), 간격(초), 최대수(0=무한)], rush = 둥지 체력 50% 이하 시 추가
+const STAGES = [
+  { name:"1. 뒷골목 입구",   base:1500,  reward:60,  spawns:[["rat",2,5,0]], rush:[["rat",0,2,6]] },
+  { name:"2. 폐공장 지대",   base:2500,  reward:90,  spawns:[["rat",1,4,0],["hound",14,12,0]], rush:[["hound",0,4,4]] },
+  { name:"3. 무너진 고가도로", base:4000, reward:130, spawns:[["rat",1,3,0],["hound",8,9,0],["knight",30,30,0]], rush:[["knight",0,8,2]] },
+  { name:"4. 울음의 지하철", base:6000,  reward:180, spawns:[["hound",3,7,0],["wailer",15,18,0],["mask",25,14,0]], rush:[["wailer",0,6,3]] },
+  { name:"5. 잿빛 광장 (보스)", base:9000, reward:300, spawns:[["rat",1,3,0],["mask",10,12,0],["knight",20,25,0]], rush:[["lord",0,999,1],["hound",2,3,8]] },
+  { name:"6. 덩굴 정원",     base:14000, reward:350, spawns:[["mask",2,8,0],["maw",25,40,0],["wailer",12,16,0]], rush:[["maw",0,20,2]] },
+  { name:"7. 종소리 구역 (보스)", base:20000, reward:500, spawns:[["hound",1,4,0],["knight",10,18,0],["wailer",14,14,0]], rush:[["bell",0,999,1],["mask",3,4,8]] },
+  { name:"8. 도시의 중심 (최종)", base:30000, reward:900, spawns:[["mask",1,5,0],["knight",6,14,0],["maw",20,30,0],["wailer",10,12,0],["lord",60,90,0]], rush:[["heart",0,999,1],["maw",5,15,3]] },
+];
+
+const OFFICE = [
+  { id:"wallet", name:"자금 회수율",  desc:"전투 중 자금이 차오르는 속도 +12%/Lv",  max:10, base:80 },
+  { id:"cash",   name:"초기 자금",    desc:"전투 시작 시 자금 +100/Lv",           max:10, base:60 },
+  { id:"baseHp", name:"사무소 방벽",  desc:"아군 거점 체력 +15%/Lv",              max:10, base:70 },
+  { id:"cannon", name:"등불포 개량",  desc:"등불포 피해 +20%, 충전 속도 +8%/Lv",   max:10, base:90 },
+  { id:"cool",   name:"신속 배치",    desc:"요원 재배치 시간 -5%/Lv",             max:6,  base:120 },
+];
+
+/* =========================================================
+   저장
+   ========================================================= */
+const SAVE_KEY = "ashen-line-save-v1";
+function defaultSave() {
+  return { shards: 0, cleared: 0, stars: {}, levels: { rookie:1, warden:1 }, office: {} };
+}
+let save = (() => {
+  try { return Object.assign(defaultSave(), JSON.parse(localStorage.getItem(SAVE_KEY)) || {}); }
+  catch { return defaultSave(); }
+})();
+function persist() { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); }
+const officeLv = id => save.office[id] || 0;
+const unitLv = id => save.levels[id] || 0;
+const lvMul = lv => 1 + (lv - 1) * 0.2;
+const unitUpCost = (u, lv) => Math.round((40 + u.cost * 0.35) * Math.pow(1.45, lv - 1));
+const unitUnlockCost = u => Math.round(u.cost * 0.6);
+const officeCost = (o, lv) => Math.round(o.base * Math.pow(1.6, lv));
+
+/* =========================================================
+   그리기 (캐릭터 아이콘)
+   ========================================================= */
+function drawUnitFigure(ctx, def, x, y, s, t, attacking, flip) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(flip ? -s : s, s);
+  const bob = Math.sin(t * 10) * 1.2;
+  // 그림자
+  ctx.fillStyle = "rgba(0,0,0,.35)";
+  ctx.beginPath(); ctx.ellipse(0, 0, 11, 3, 0, 0, Math.PI * 2); ctx.fill();
+  // 다리
+  ctx.strokeStyle = "#1a171f"; ctx.lineWidth = 3; ctx.lineCap = "round";
+  const leg = Math.sin(t * 10) * 4;
+  ctx.beginPath(); ctx.moveTo(-3, -10); ctx.lineTo(-3 + leg, 0); ctx.moveTo(3, -10); ctx.lineTo(3 - leg, 0); ctx.stroke();
+  // 코트
+  ctx.fillStyle = "#24202b";
+  ctx.beginPath(); ctx.moveTo(-7, -26 + bob); ctx.lineTo(7, -26 + bob); ctx.lineTo(9, -8); ctx.lineTo(-9, -8); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = def.color;
+  ctx.fillRect(-2, -26 + bob, 4, 16); // 넥타이/표식
+  // 머리
+  ctx.fillStyle = "#e6d9c4";
+  ctx.beginPath(); ctx.arc(0, -32 + bob, 6, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#2b2530";
+  ctx.beginPath(); ctx.arc(0, -34 + bob, 6.3, Math.PI, 0); ctx.fill();
+  ctx.fillStyle = "#111"; ctx.fillRect(-4, -32 + bob, 2, 2);
+  // 무기 (왼쪽을 바라봄)
+  const sw = attacking ? Math.sin(Math.min(1, attacking) * Math.PI) : 0;
+  ctx.save();
+  ctx.translate(-6, -20 + bob);
+  ctx.rotate(-0.4 - sw * 1.4);
+  ctx.strokeStyle = def.color; ctx.fillStyle = def.color; ctx.lineWidth = 2.5;
+  switch (def.weapon) {
+    case "baton": ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(-12,-6); ctx.stroke(); break;
+    case "shield":
+      ctx.rotate(0.4 + sw * 1.2);
+      ctx.fillRect(-10, -8, 6, 18); ctx.fillStyle = "#cfe3f0"; ctx.fillRect(-9, -2, 4, 4); break;
+    case "blade": ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(-15,-4); ctx.stroke(); break;
+    case "rifle":
+      ctx.rotate(0.4 + sw * 1.4);
+      ctx.fillRect(-20, -2, 22, 3); ctx.fillRect(-2, 0, 4, 5); break;
+    case "staff":
+      ctx.beginPath(); ctx.moveTo(4,4); ctx.lineTo(-14,-10); ctx.stroke();
+      ctx.fillStyle = "#ffcf6b"; ctx.beginPath(); ctx.arc(-15,-11,3.5,0,Math.PI*2); ctx.fill(); break;
+    case "axe":
+      ctx.beginPath(); ctx.moveTo(4,4); ctx.lineTo(-16,-8); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-14,-7); ctx.quadraticCurveTo(-24,-18,-12,-20); ctx.lineTo(-10,-10); ctx.fill(); break;
+    case "lamp":
+      ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(-10,-8); ctx.stroke();
+      ctx.fillStyle = "#fff1b8"; ctx.shadowColor = "#f2c36b"; ctx.shadowBlur = 12;
+      ctx.beginPath(); ctx.arc(-12,-4,5,0,Math.PI*2); ctx.fill(); break;
+  }
+  ctx.restore();
+  ctx.restore();
+}
+
+function drawEnemyFigure(ctx, def, x, y, s, t, attacking) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(s, s);
+  const bob = Math.sin(t * 8) * 1.5;
+  const lunge = attacking ? Math.sin(Math.min(1, attacking) * Math.PI) * 6 : 0;
+  ctx.translate(lunge, 0);
+  ctx.fillStyle = "rgba(0,0,0,.35)";
+  ctx.beginPath(); ctx.ellipse(0, 0, 13, 3.5, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = def.color;
+  const eye = (ex, ey, r = 2.2) => { ctx.fillStyle = "#ff3b30"; ctx.beginPath(); ctx.arc(ex, ey, r, 0, Math.PI*2); ctx.fill(); };
+  switch (def.shape) {
+    case "rat":
+      ctx.beginPath(); ctx.ellipse(0, -7 + bob*0.5, 12, 7, 0, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(-12,-6); ctx.lineTo(-20,-3); ctx.lineTo(-11,-2); ctx.fill();
+      ctx.strokeStyle = def.color; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(12,-6); ctx.quadraticCurveTo(22,-14,26,-4); ctx.stroke();
+      eye(8,-9); break;
+    case "hound":
+      ctx.fillRect(-12, -16 + bob, 22, 9);
+      ctx.beginPath(); ctx.moveTo(10,-18+bob); ctx.lineTo(22,-14+bob); ctx.lineTo(10,-8+bob); ctx.fill();
+      ctx.strokeStyle = def.color; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(-9,-8); ctx.lineTo(-9 - bob,0); ctx.moveTo(6,-8); ctx.lineTo(6 + bob,0); ctx.stroke();
+      eye(15,-15+bob); break;
+    case "knight":
+      ctx.fillRect(-9, -30 + bob, 18, 24);
+      ctx.fillStyle = "#5c5140"; ctx.fillRect(-7, -40 + bob, 14, 11);
+      ctx.fillStyle = "#1a171f"; ctx.fillRect(-1, -37 + bob, 8, 2);
+      ctx.fillStyle = "#3a332a"; ctx.fillRect(-7, -6, 5, 6); ctx.fillRect(2, -6, 5, 6);
+      ctx.strokeStyle = "#b8a888"; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(8, -20 + bob); ctx.lineTo(22 + lunge, -30 + bob); ctx.stroke();
+      eye(4,-36+bob,1.5); break;
+    case "wailer":
+      ctx.beginPath(); ctx.moveTo(-10, 0); ctx.quadraticCurveTo(-12, -30 + bob, 0, -36 + bob); ctx.quadraticCurveTo(12, -30 + bob, 10, 0); ctx.fill();
+      ctx.fillStyle = "#1a0f18"; ctx.beginPath(); ctx.ellipse(3, -22 + bob, 3, 5 + (attacking?3:0), 0, 0, Math.PI*2); ctx.fill();
+      eye(-1,-30+bob); eye(6,-30+bob); break;
+    case "mask":
+      ctx.fillStyle = "#2a2430"; ctx.fillRect(-7, -24 + bob, 14, 18);
+      ctx.fillStyle = def.color; ctx.beginPath(); ctx.ellipse(1, -30 + bob, 7, 8, 0, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = "#111"; ctx.fillRect(-3,-32+bob,3,2); ctx.fillRect(3,-32+bob,3,2);
+      ctx.beginPath(); ctx.arc(1,-26+bob,3,0,Math.PI); ctx.fill();
+      ctx.strokeStyle = "#ccc"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(7,-18+bob); ctx.lineTo(16+lunge,-22+bob); ctx.stroke();
+      ctx.strokeStyle = "#1a171f"; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(-3,-6); ctx.lineTo(-3-bob,0); ctx.moveTo(3,-6); ctx.lineTo(3+bob,0); ctx.stroke();
+      break;
+    case "maw":
+      ctx.beginPath(); ctx.ellipse(0, -16 + bob, 18, 16, 0, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = "#1a0a0a"; ctx.beginPath(); ctx.ellipse(8, -16 + bob, 9, 4 + (attacking?7:2), 0, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = "#eee"; for (let i=0;i<4;i++){ ctx.beginPath(); ctx.moveTo(2+i*4,-18+bob); ctx.lineTo(4+i*4,-14+bob); ctx.lineTo(6+i*4,-18+bob); ctx.fill(); }
+      ctx.strokeStyle = def.color; ctx.lineWidth = 3;
+      for (let i=0;i<3;i++){ ctx.beginPath(); ctx.moveTo(-10+i*8,-2); ctx.quadraticCurveTo(-14+i*8 + bob*2, 4, -8+i*8, 0); ctx.stroke(); }
+      eye(-4,-26+bob); eye(4,-28+bob); eye(-10,-20+bob,1.6); break;
+    case "lord":
+      ctx.beginPath(); ctx.moveTo(-14,0); ctx.lineTo(-11,-34+bob); ctx.lineTo(11,-34+bob); ctx.lineTo(14,0); ctx.fill();
+      ctx.fillStyle = "#8a8a96"; ctx.beginPath(); ctx.arc(0,-40+bob,8,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle = "#f2c36b"; ctx.beginPath(); ctx.moveTo(-8,-46+bob); ctx.lineTo(-6,-54+bob); ctx.lineTo(-2,-48+bob); ctx.lineTo(0,-56+bob); ctx.lineTo(2,-48+bob); ctx.lineTo(6,-54+bob); ctx.lineTo(8,-46+bob); ctx.fill();
+      ctx.strokeStyle = "#c9c1b0"; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(10,-24+bob); ctx.lineTo(30+lunge,-44+bob); ctx.stroke();
+      eye(-3,-41+bob,1.8); eye(4,-41+bob,1.8); break;
+    case "bell":
+      ctx.beginPath(); ctx.moveTo(-16, -6 + bob); ctx.quadraticCurveTo(-14, -44 + bob, 0, -46 + bob); ctx.quadraticCurveTo(14, -44 + bob, 16, -6 + bob); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = "#2a3a4a"; ctx.fillRect(-17, -8 + bob, 34, 4);
+      ctx.fillStyle = "#cfe3f0"; ctx.beginPath(); ctx.arc(Math.sin(t*3)*4, -2 + bob, 4, 0, Math.PI*2); ctx.fill();
+      eye(-5,-28+bob); eye(5,-28+bob); break;
+    case "heart": {
+      const pulse = 1 + Math.sin(t * 6) * 0.06;
+      ctx.save(); ctx.translate(0,-24); ctx.scale(pulse,pulse);
+      ctx.beginPath(); ctx.moveTo(0, 14); ctx.bezierCurveTo(-24, -2, -16, -24, 0, -12); ctx.bezierCurveTo(16, -24, 24, -2, 0, 14); ctx.fill();
+      ctx.strokeStyle = "#5a1010"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-6,-14); ctx.lineTo(-8,-26); ctx.moveTo(4,-14); ctx.lineTo(8,-28); ctx.stroke();
+      ctx.restore(); eye(-5,-28); eye(5,-28); eye(0,-20,2.6); break;
+    }
+  }
+  ctx.restore();
+}
+
+function iconCanvas(def, isEnemy, px = 54) {
+  const c = document.createElement("canvas");
+  const dpr = 2; c.width = px * dpr; c.height = px * dpr;
+  const ctx = c.getContext("2d");
+  ctx.scale(dpr, dpr);
+  const sc = px / 54 * 1.15 / Math.max(1, (def.size || 1) * 0.75);
+  if (isEnemy) drawEnemyFigure(ctx, def, px / 2, px * 0.88, sc, 0, 0);
+  else drawUnitFigure(ctx, def, px / 2, px * 0.88, sc, 0, 0, false);
+  return c;
+}
+
+/* =========================================================
+   메뉴 UI
+   ========================================================= */
+const $ = s => document.querySelector(s);
+document.querySelectorAll(".tab").forEach(t => t.onclick = () => {
+  document.querySelectorAll(".tab").forEach(x => x.classList.toggle("on", x === t));
+  document.querySelectorAll(".panel").forEach(p => p.classList.toggle("on", p.id === "p-" + t.dataset.tab));
+});
+$("#resetBtn").onclick = () => {
+  if (confirm("모든 진행 상황을 초기화할까요?")) { save = defaultSave(); persist(); renderMenu(); }
+};
+
+function renderMenu() {
+  $("#shards").textContent = save.shards;
+  $("#progressTxt").textContent = `작전 ${save.cleared}/${STAGES.length} 완료`;
+
+  // 스테이지
+  const ps = $("#p-stages"); ps.innerHTML = "";
+  STAGES.forEach((st, i) => {
+    const locked = i > save.cleared;
+    const card = document.createElement("div");
+    card.className = "card" + (locked ? " locked" : "");
+    const bossKey = st.rush.find(r => ENEMIES[r[0]].boss);
+    const foe = ENEMIES[bossKey ? bossKey[0] : st.spawns[st.spawns.length - 1][0]];
+    card.appendChild(iconCanvas(foe, true));
+    const stars = save.stars[i] ? `<span class="star">★ 클리어</span>` : "";
+    card.insertAdjacentHTML("beforeend", `<div class="info"><div class="name">${st.name} ${stars}</div>
+      <div class="desc">둥지 체력 ${st.base.toLocaleString()} · 보상 ${st.reward} ◆${save.stars[i] ? " (재도전 시 절반)" : ""}</div></div>`);
+    const b = document.createElement("button");
+    b.className = "btn"; b.textContent = locked ? "잠김" : "출격"; b.disabled = locked;
+    b.onclick = () => startBattle(i);
+    card.appendChild(b);
+    ps.appendChild(card);
+  });
+
+  // 유닛
+  const pu = $("#p-units"); pu.innerHTML = "";
+  UNITS.forEach(u => {
+    const lv = unitLv(u.id);
+    const avail = save.cleared >= u.unlock;
+    const card = document.createElement("div");
+    card.className = "card" + (!avail ? " locked" : "");
+    card.appendChild(iconCanvas(u, false));
+    const m = lvMul(Math.max(1, lv));
+    card.insertAdjacentHTML("beforeend", `<div class="info"><div class="name">${u.name} ${lv ? `<span class="star">Lv.${lv}</span>` : ""}</div>
+      <div class="desc">${u.desc}</div>
+      <div class="stat">비용 ${u.cost}₩ · 체력 ${Math.round(u.hp*m)} · 공격 ${Math.round(u.atk*m)}${u.area?" (범위)":""} · 사거리 ${u.range}</div></div>`);
+    const b = document.createElement("button"); b.className = "btn";
+    if (!avail) { b.textContent = `작전 ${u.unlock} 클리어`; b.disabled = true; }
+    else if (!lv) {
+      const c = unitUnlockCost(u);
+      b.textContent = `고용 ${c}◆`; b.disabled = save.shards < c;
+      b.onclick = () => { save.shards -= c; save.levels[u.id] = 1; persist(); renderMenu(); };
+    } else if (lv >= 10) { b.textContent = "MAX"; b.disabled = true; }
+    else {
+      const c = unitUpCost(u, lv);
+      b.textContent = `강화 ${c}◆`; b.disabled = save.shards < c;
+      b.onclick = () => { save.shards -= c; save.levels[u.id] = lv + 1; persist(); renderMenu(); };
+    }
+    card.appendChild(b);
+    pu.appendChild(card);
+  });
+
+  // 사무소
+  const po = $("#p-office"); po.innerHTML = "";
+  OFFICE.forEach(o => {
+    const lv = officeLv(o.id);
+    const card = document.createElement("div"); card.className = "card";
+    card.insertAdjacentHTML("beforeend", `<div class="info"><div class="name">${o.name} <span class="star">Lv.${lv}/${o.max}</span></div><div class="desc">${o.desc}</div></div>`);
+    const b = document.createElement("button"); b.className = "btn";
+    if (lv >= o.max) { b.textContent = "MAX"; b.disabled = true; }
+    else {
+      const c = officeCost(o, lv);
+      b.textContent = `강화 ${c}◆`; b.disabled = save.shards < c;
+      b.onclick = () => { save.shards -= c; save.office[o.id] = lv + 1; persist(); renderMenu(); };
+    }
+    card.appendChild(b);
+    po.appendChild(card);
+  });
+}
+
+/* =========================================================
+   전투
+   ========================================================= */
+const cv = $("#cv"), ctx = cv.getContext("2d");
+const W = 1200, H = 420, GROUND = 340;
+const ENEMY_BASE_X = 90, PLAYER_BASE_X = 1110;
+const WALLET_MAX_LV = 8;
+let B = null; // battle state
+let lastT = 0, rafId = 0;
+
+function resize() {
+  const r = cv.getBoundingClientRect();
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  cv.width = r.width * dpr; cv.height = r.height * dpr;
+}
+window.addEventListener("resize", resize);
+
+function walletStats(lv) {
+  const rateMul = 1 + officeLv("wallet") * 0.12;
+  return { max: 500 + lv * 500, rate: (25 + lv * 13) * rateMul, upCost: 80 + lv * 80 };
+}
+
+function startBattle(idx) {
+  const st = STAGES[idx];
+  const baseHpMul = 1 + officeLv("baseHp") * 0.15;
+  B = {
+    idx, st, t: 0, paused: false, over: false,
+    money: officeLv("cash") * 100, walletLv: 1,
+    cannon: 0, cannonMax: 100,
+    ents: [], fx: [], nums: [], shake: 0,
+    pBase: { hp: 3000 * baseHpMul, max: 3000 * baseHpMul, x: PLAYER_BASE_X, hit: 0 },
+    eBase: { hp: st.base, max: st.base, x: ENEMY_BASE_X, hit: 0 },
+    spawners: st.spawns.map(s => ({ e: s[0], next: s[1], every: s[2], left: s[3] || Infinity })),
+    rush: null, rushOn: false,
+    cds: {},
+    team: UNITS.filter(u => unitLv(u.id) > 0),
+  };
+  buildSlots();
+  $("#stageName").textContent = st.name;
+  document.querySelectorAll(".screen").forEach(s => s.classList.toggle("active", s.id === "battle"));
+  resize();
+  lastT = performance.now();
+  cancelAnimationFrame(rafId);
+  rafId = requestAnimationFrame(loop);
+}
+
+function buildSlots() {
+  const box = $("#slots"); box.innerHTML = "";
+  for (let i = 0; i < 7; i++) {
+    const u = B.team[i];
+    const el = document.createElement("div");
+    el.className = "slot" + (u ? "" : " empty");
+    if (u) {
+      el.appendChild(iconCanvas(u, false, 40));
+      el.insertAdjacentHTML("beforeend", `<div class="cost">${u.cost}₩</div><div class="cd"></div>`);
+      el.onclick = () => deploy(u);
+      u._el = el;
+    }
+    box.appendChild(el);
+  }
+}
+
+function deploy(u) {
+  if (!B || B.over || B.paused) return;
+  if (B.money < u.cost || (B.cds[u.id] || 0) > 0) return;
+  B.money -= u.cost;
+  B.cds[u.id] = u.cd * (1 - officeLv("cool") * 0.05);
+  spawnEnt(u, "p", unitLv(u.id));
+}
+
+function spawnEnt(def, team, lv = 1, mul = 1) {
+  const m = team === "p" ? lvMul(lv) : mul;
+  const e = {
+    def, team, x: team === "p" ? PLAYER_BASE_X - 30 : ENEMY_BASE_X + 30,
+    y: GROUND + (Math.random() * 14 - 7),
+    hp: def.hp * m, max: def.hp * m, atk: def.atk * m,
+    state: "walk", atkT: 0, swing: 0, knockT: 0, kbDone: 0, dead: 0,
+    t: Math.random() * 10,
+  };
+  B.ents.push(e);
+  if (def.boss) { B.shake = 0.6; floatText(W / 2, 120, `⚠ ${def.name} 출현`, "#ff6b5b", 26); }
+  return e;
+}
+
+const dirOf = e => e.team === "p" ? -1 : 1;
+
+function findTargets(e) {
+  // 앞쪽 사거리 안의 적을 찾는다 (냥코식: 가장 앞에 있는 적을 기준으로 정지)
+  const d = dirOf(e), reach = e.def.range + 10 * e.def.size;
+  let list = [];
+  for (const o of B.ents) {
+    if (o.team === e.team || o.dead || o.state === "knock") continue;
+    const dist = (o.x - e.x) * d;
+    if (dist >= -8 && dist <= reach) list.push(o);
+  }
+  const base = e.team === "p" ? B.eBase : B.pBase;
+  const bdist = (base.x - e.x) * d - 30;
+  const baseIn = bdist <= reach;
+  return { list, base, baseIn };
+}
+
+function damage(target, amt, src) {
+  if (target.dead) return;
+  target.hp -= amt;
+  B.fx.push({ x: target.x + (Math.random()*10-5), y: target.y - 22 * target.def.size, t: 0, c: src.team === "p" ? "#f2c36b" : "#ff4b3b", r: 4 + Math.min(10, amt / 30) });
+  if (amt >= 60) floatText(target.x, target.y - 46 * target.def.size, Math.round(amt), src.team === "p" ? "#ffe2a0" : "#ff8a7d", 14);
+  // 넉백 판정
+  const kbN = target.def.kb;
+  const thr = target.max * (1 - (target.kbDone + 1) / kbN);
+  if (target.hp <= 0) {
+    target.dead = 0.001;
+    target.state = "knock"; target.knockT = 0.5;
+    if (target.team === "e") {
+      B.money = Math.min(walletStats(B.walletLv).max, B.money + target.def.reward);
+      floatText(target.x, target.y - 30, `+${target.def.reward}₩`, "#f2c36b", 13);
+    }
+  } else if (target.hp <= thr && kbN > 1) {
+    target.kbDone++;
+    target.state = "knock"; target.knockT = 0.45; target.swing = 0;
+  }
+}
+
+function hitBase(base, amt, src) {
+  base.hp -= amt; base.hit = 0.15;
+  B.fx.push({ x: base.x + (Math.random()*30-15), y: GROUND - 60 - Math.random()*60, t: 0, c: src.team === "p" ? "#f2c36b" : "#ff4b3b", r: 6 });
+}
+
+function floatText(x, y, txt, c, size = 14) { B.nums.push({ x, y, txt: String(txt), c, size, t: 0 }); }
+
+function fireCannon() {
+  if (!B || B.over || B.paused || B.cannon < B.cannonMax) return;
+  B.cannon = 0;
+  const dmg = 300 * (1 + officeLv("cannon") * 0.2);
+  B.shake = 0.4;
+  B.beam = 0.5;
+  for (const e of B.ents) {
+    if (e.team === "e" && !e.dead) {
+      damage(e, dmg, { team: "p" });
+      if (!e.dead && e.state !== "knock") { e.state = "knock"; e.knockT = 0.45; }
+    }
+  }
+}
+
+function update(dt) {
+  B.t += dt;
+  const ws = walletStats(B.walletLv);
+  B.money = Math.min(ws.max, B.money + ws.rate * dt);
+  B.cannon = Math.min(B.cannonMax, B.cannon + dt * 100 / 30 * (1 + officeLv("cannon") * 0.08));
+  for (const k in B.cds) B.cds[k] = Math.max(0, B.cds[k] - dt);
+  B.shake = Math.max(0, B.shake - dt);
+  if (B.beam) B.beam = Math.max(0, B.beam - dt);
+  B.pBase.hit = Math.max(0, B.pBase.hit - dt);
+  B.eBase.hit = Math.max(0, B.eBase.hit - dt);
+
+  // 적 스폰 (시간이 지날수록 조금씩 강해짐)
+  const scale = 1 + B.t / 240;
+  const runSpawners = list => {
+    for (const s of list) {
+      if (s.left <= 0) continue;
+      s.next -= dt;
+      if (s.next <= 0) { s.next += s.every; s.left--; spawnEnt(ENEMIES[s.e], "e", 1, ENEMIES[s.e].boss ? 1 : scale); }
+    }
+  };
+  runSpawners(B.spawners);
+  if (!B.rushOn && B.eBase.hp <= B.eBase.max * 0.5) {
+    B.rushOn = true;
+    B.rush = B.st.rush.map(s => ({ e: s[0], next: s[1], every: s[2], left: s[3] || Infinity }));
+    B.shake = 0.5;
+    floatText(ENEMY_BASE_X + 60, GROUND - 160, "둥지가 요동친다!", "#ff6b5b", 20);
+  }
+  if (B.rush) runSpawners(B.rush);
+
+  // 개체 업데이트
+  for (const e of B.ents) {
+    e.t += dt;
+    const d = dirOf(e);
+    if (e.dead) { e.dead += dt; e.x -= d * 40 * dt; continue; }
+    if (e.state === "knock") {
+      e.knockT -= dt;
+      e.x -= d * 140 * dt;
+      e.x = Math.max(ENEMY_BASE_X + 10, Math.min(PLAYER_BASE_X - 10, e.x));
+      if (e.knockT <= 0) { e.state = "walk"; e.swing = 0; }
+      continue;
+    }
+    const { list, base, baseIn } = findTargets(e);
+    const engaged = list.length > 0 || baseIn;
+    if (e.state === "attack") {
+      e.swing += dt / 0.35; // 공격 모션
+      if (e.swing >= 0.5 && !e.hitDone) {
+        e.hitDone = true;
+        const tg = findTargets(e);
+        if (e.def.area) {
+          for (const o of tg.list) damage(o, e.atk, e);
+          if (tg.baseIn) hitBase(tg.base, e.atk, e);
+          if (e.def.weapon === "staff" || e.def.weapon === "lamp" || e.def.shape === "wailer" || e.def.shape === "bell")
+            B.fx.push({ wave: true, x: e.x, y: e.y, dir: d, len: e.def.range, t: 0, c: e.team === "p" ? "#f08a3c" : "#b05aff" });
+        } else if (tg.list.length) {
+          // 가장 가까운 적
+          tg.list.sort((a, b) => (a.x - e.x) * d - (b.x - e.x) * d);
+          damage(tg.list[0], e.atk, e);
+          if (e.def.weapon === "rifle") B.fx.push({ line: true, x1: e.x - 18, y1: e.y - 22, x2: tg.list[0].x, y2: tg.list[0].y - 18, t: 0 });
+        } else if (tg.baseIn) hitBase(tg.base, e.atk, e);
+      }
+      if (e.swing >= 1) { e.state = "cool"; e.atkT = e.def.rate; e.swing = 0; }
+    } else if (e.state === "cool") {
+      e.atkT -= dt;
+      if (!engaged) e.x += d * e.def.speed * dt * 0.5;
+      if (e.atkT <= 0) e.state = "walk";
+    } else { // walk
+      if (engaged) { e.state = "attack"; e.swing = 0; e.hitDone = false; }
+      else e.x += d * e.def.speed * dt;
+    }
+    e.x = Math.max(ENEMY_BASE_X + 10, Math.min(PLAYER_BASE_X - 10, e.x));
+  }
+  B.ents = B.ents.filter(e => !e.dead || e.dead < 0.6);
+
+  for (const f of B.fx) f.t += dt;
+  B.fx = B.fx.filter(f => f.t < (f.wave ? 0.35 : f.line ? 0.12 : 0.3));
+  for (const n of B.nums) { n.t += dt; n.y -= 30 * dt; }
+  B.nums = B.nums.filter(n => n.t < 1.1);
+
+  // 승패
+  if (B.eBase.hp <= 0) endBattle(true);
+  else if (B.pBase.hp <= 0) endBattle(false);
+}
+
+/* ---------- 렌더 ---------- */
+function drawBase(base, isPlayer) {
+  const x = base.x, y = GROUND;
+  ctx.save();
+  if (base.hit) ctx.translate((Math.random() - .5) * 4, 0);
+  if (isPlayer) {
+    // 등불 사무소 건물
+    ctx.fillStyle = "#2a2430"; ctx.fillRect(x - 40, y - 150, 80, 150);
+    ctx.fillStyle = "#3a3242"; ctx.fillRect(x - 46, y - 158, 92, 12);
+    for (let r = 0; r < 4; r++) for (let c = 0; c < 2; c++) {
+      ctx.fillStyle = (r + c + Math.floor(B.t)) % 5 === 0 ? "#6b5a30" : "#f2c36b";
+      ctx.globalAlpha = .85; ctx.fillRect(x - 28 + c * 34, y - 138 + r * 30, 22, 16);
+    }
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = "#1a161f"; ctx.fillRect(x - 12, y - 30, 24, 30);
+    // 등불
+    ctx.shadowColor = "#f2c36b"; ctx.shadowBlur = 20 + Math.sin(B.t * 3) * 6;
+    ctx.fillStyle = "#fff1b8"; ctx.beginPath(); ctx.arc(x, y - 172, 9, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0;
+  } else {
+    // 잔향체 둥지
+    const p = 1 + Math.sin(B.t * 2) * 0.03;
+    ctx.translate(x, y); ctx.scale(p, p);
+    ctx.fillStyle = "#2a1520";
+    ctx.beginPath(); ctx.moveTo(-50, 0); ctx.quadraticCurveTo(-60, -110, -10, -160); ctx.quadraticCurveTo(20, -120, 30, -170); ctx.quadraticCurveTo(70, -90, 50, 0); ctx.fill();
+    ctx.fillStyle = "#4a1a2a";
+    ctx.beginPath(); ctx.ellipse(0, -70, 22, 34, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#ff3b30"; ctx.shadowColor = "#ff3b30"; ctx.shadowBlur = 16;
+    ctx.beginPath(); ctx.ellipse(0, -70, 7, 12 * (0.6 + 0.4 * Math.abs(Math.sin(B.t))), 0, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+  ctx.restore();
+  // 체력 표시
+  ctx.fillStyle = "#e8e2d4"; ctx.font = "bold 15px sans-serif"; ctx.textAlign = "center";
+  ctx.fillText(`${Math.max(0, Math.ceil(base.hp)).toLocaleString()} / ${Math.round(base.max).toLocaleString()}`, x, y - 196);
+}
+
+function render() {
+  const sx = cv.width / W, sy = cv.height / H;
+  const s = Math.min(sx, sy);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = "#0b0a0f"; ctx.fillRect(0, 0, cv.width, cv.height);
+  const ox = (cv.width - W * s) / 2, oy = (cv.height - H * s);
+  ctx.setTransform(s, 0, 0, s, ox, oy);
+  if (B.shake) ctx.translate((Math.random() - .5) * 10 * B.shake, (Math.random() - .5) * 10 * B.shake);
+
+  // 배경: 하늘 + 도시 실루엣
+  const g = ctx.createLinearGradient(0, 0, 0, GROUND);
+  g.addColorStop(0, "#1a1222"); g.addColorStop(1, "#3a2430");
+  ctx.fillStyle = g; ctx.fillRect(-20, -200, W + 40, GROUND + 200);
+  ctx.fillStyle = "rgba(242,195,107,.08)"; ctx.beginPath(); ctx.arc(900, 70, 46, 0, Math.PI * 2); ctx.fill();
+  for (let layer = 0; layer < 2; layer++) {
+    ctx.fillStyle = layer ? "#1c1620" : "#261c28";
+    for (let i = 0; i < 26; i++) {
+      const bw = 40 + ((i * 37 + layer * 13) % 50), bh = 60 + ((i * 53 + layer * 29) % (layer ? 110 : 170));
+      ctx.fillRect(i * 50 - 20 + layer * 20, GROUND - bh, bw, bh);
+    }
+  }
+  // 바닥
+  ctx.fillStyle = "#16121a"; ctx.fillRect(-20, GROUND, W + 40, H - GROUND + 20);
+  ctx.fillStyle = "#2c2430"; ctx.fillRect(-20, GROUND, W + 40, 3);
+
+  drawBase(B.eBase, false);
+  drawBase(B.pBase, true);
+
+  // 등불포 빔
+  if (B.beam) {
+    ctx.globalAlpha = B.beam * 2;
+    const bg = ctx.createLinearGradient(0, GROUND - 40, 0, GROUND);
+    bg.addColorStop(0, "rgba(255,241,184,0)"); bg.addColorStop(1, "rgba(255,241,184,.9)");
+    ctx.fillStyle = bg; ctx.fillRect(ENEMY_BASE_X, GROUND - 60, PLAYER_BASE_X - ENEMY_BASE_X, 60);
+    ctx.globalAlpha = 1;
+  }
+
+  // 개체 (y순 정렬)
+  const sorted = [...B.ents].sort((a, b) => a.y - b.y);
+  for (const e of sorted) {
+    ctx.globalAlpha = e.dead ? Math.max(0, 1 - e.dead / 0.6) : 1;
+    const atk = e.state === "attack" ? e.swing : 0;
+    const t = e.state === "walk" ? e.t : 0;
+    if (e.team === "p") drawUnitFigure(ctx, e.def, e.x, e.y, 1.25 * e.def.size, t, atk, false);
+    else drawEnemyFigure(ctx, e.def, e.x, e.y, 1.25 * e.def.size, t, atk);
+    ctx.globalAlpha = 1;
+    // 체력바 (피해 입은 경우만)
+    if (!e.dead && e.hp < e.max) {
+      const w = 26 * Math.max(1, e.def.size * 0.8), hy = e.y - 52 * e.def.size - 6;
+      ctx.fillStyle = "#000"; ctx.fillRect(e.x - w / 2, hy, w, 4);
+      ctx.fillStyle = e.team === "p" ? "#8fd07a" : "#e0564b"; ctx.fillRect(e.x - w / 2, hy, w * Math.max(0, e.hp / e.max), 4);
+    }
+  }
+
+  // 이펙트
+  for (const f of B.fx) {
+    if (f.wave) {
+      const k = f.t / 0.35;
+      ctx.globalAlpha = 1 - k; ctx.fillStyle = f.c;
+      const x0 = f.x + f.dir * 10, x1 = f.x + f.dir * f.len * k;
+      ctx.fillRect(Math.min(x0, x1), f.y - 34, Math.abs(x1 - x0), 30);
+    } else if (f.line) {
+      ctx.globalAlpha = 1 - f.t / 0.12; ctx.strokeStyle = "#fff6c8"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(f.x1, f.y1); ctx.lineTo(f.x2, f.y2); ctx.stroke();
+    } else {
+      const k = f.t / 0.3;
+      ctx.globalAlpha = 1 - k; ctx.strokeStyle = f.c; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(f.x, f.y, f.r * (1 + k * 2), 0, Math.PI * 2); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+  ctx.textAlign = "center";
+  for (const n of B.nums) {
+    ctx.globalAlpha = Math.max(0, 1 - n.t / 1.1);
+    ctx.font = `bold ${n.size}px sans-serif`;
+    ctx.fillStyle = "#000"; ctx.fillText(n.txt, n.x + 1, n.y + 1);
+    ctx.fillStyle = n.c; ctx.fillText(n.txt, n.x, n.y);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function updateHud() {
+  const ws = walletStats(B.walletLv);
+  $("#money").textContent = `${Math.floor(B.money)} / ${ws.max} ₩`;
+  const wb = $("#wallet");
+  if (B.walletLv >= WALLET_MAX_LV) wb.innerHTML = `자금함<br>MAX`;
+  else wb.innerHTML = `자금함 Lv.${B.walletLv}<br>${ws.upCost}₩`;
+  wb.style.opacity = (B.walletLv < WALLET_MAX_LV && B.money >= ws.upCost) ? 1 : 0.55;
+  const cb = $("#cannon");
+  cb.querySelector(".fill").style.height = (B.cannon / B.cannonMax * 100) + "%";
+  cb.classList.toggle("ready", B.cannon >= B.cannonMax);
+  for (const u of B.team) {
+    const cd = B.cds[u.id] || 0, total = u.cd * (1 - officeLv("cool") * 0.05);
+    u._el.classList.toggle("poor", B.money < u.cost);
+    u._el.classList.toggle("cooling", cd > 0);
+    u._el.querySelector(".cd").style.height = (cd / total * 100) + "%";
+  }
+}
+
+$("#wallet").onclick = () => {
+  if (!B || B.over || B.paused || B.walletLv >= WALLET_MAX_LV) return;
+  const ws = walletStats(B.walletLv);
+  if (B.money < ws.upCost) return;
+  B.money -= ws.upCost; B.walletLv++;
+};
+$("#cannon").onclick = fireCannon;
+$("#pauseBtn").onclick = () => {
+  if (!B || B.over) return;
+  B.paused = true;
+  showOverlay("일시정지", "작전을 잠시 멈췄습니다.", [
+    ["계속", () => { B.paused = false; hideOverlay(); lastT = performance.now(); }],
+    ["철수", () => { hideOverlay(); toMenu(); }, true],
+  ]);
+};
+
+// 키보드: 1~7 소환, Q 자금함, 스페이스 등불포
+window.addEventListener("keydown", ev => {
+  if (!B || !$("#battle").classList.contains("active")) return;
+  const n = parseInt(ev.key, 10);
+  if (n >= 1 && n <= 7 && B.team[n - 1]) deploy(B.team[n - 1]);
+  else if (ev.key === "q" || ev.key === "Q") $("#wallet").click();
+  else if (ev.key === " ") { ev.preventDefault(); fireCannon(); }
+  else if (ev.key === "Escape") $("#pauseBtn").click();
+});
+
+function loop(now) {
+  const dt = Math.min(0.05, (now - lastT) / 1000);
+  lastT = now;
+  if (B && !B.paused && !B.over) update(dt);
+  if (B) { render(); updateHud(); }
+  if (B) rafId = requestAnimationFrame(loop);
+}
+
+function endBattle(win) {
+  B.over = true;
+  if (win) {
+    const first = !save.stars[B.idx];
+    const reward = first ? B.st.reward : Math.round(B.st.reward / 2);
+    save.shards += reward;
+    save.stars[B.idx] = 1;
+    if (B.idx + 1 > save.cleared) save.cleared = B.idx + 1;
+    persist();
+    const unlocked = UNITS.filter(u => u.unlock === save.cleared && first).map(u => u.name);
+    const isLast = B.idx === STAGES.length - 1;
+    showOverlay(isLast ? "도시를 되찾았다!" : "작전 성공",
+      `잔향체의 둥지를 파괴했습니다.<br>보상: <b style="color:#9fe0ff">${reward} ◆</b>` +
+      (unlocked.length ? `<br>새 요원 고용 가능: <b class="star">${unlocked.join(", ")}</b>` : "") +
+      (isLast && first ? `<br><br>등불 사무소의 모든 작전을 완수했습니다.` : ""),
+      [
+        ...(B.idx + 1 < STAGES.length ? [["다음 작전", () => { hideOverlay(); startBattle(B.idx + 1); }]] : []),
+        ["사무소로", () => { hideOverlay(); toMenu(); }],
+      ]);
+  } else {
+    const consolation = Math.round(B.st.reward * 0.15 * (1 - Math.max(0, B.eBase.hp) / B.eBase.max));
+    save.shards += consolation; persist();
+    showOverlay("사무소 함락", `요원들이 퇴각했습니다.<br>회수한 파편: ${consolation} ◆<br><span style="color:#8d8676;font-size:13px">요원을 강화하고 다시 도전하세요.</span>`, [
+      ["재도전", () => { hideOverlay(); startBattle(B.idx); }],
+      ["사무소로", () => { hideOverlay(); toMenu(); }, true],
+    ]);
+  }
+}
+
+function toMenu() {
+  B = null; cancelAnimationFrame(rafId);
+  document.querySelectorAll(".screen").forEach(s => s.classList.toggle("active", s.id === "menu"));
+  renderMenu();
+}
+
+function showOverlay(title, html, btns) {
+  $("#ovTitle").textContent = title;
+  $("#ovText").innerHTML = html;
+  const row = $("#ovBtns"); row.innerHTML = "";
+  for (const [label, fn, red] of btns) {
+    const b = document.createElement("button");
+    b.className = "btn" + (red ? " red" : ""); b.textContent = label; b.onclick = fn;
+    row.appendChild(b);
+  }
+  $("#overlay").classList.add("show");
+}
+function hideOverlay() { $("#overlay").classList.remove("show"); }
+
+renderMenu();
+</script>
+</body>
+</html>
